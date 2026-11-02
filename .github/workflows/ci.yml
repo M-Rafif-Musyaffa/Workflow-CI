@@ -1,0 +1,53 @@
+name: MLflow CI & Docker Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas scikit-learn mlflow
+
+    - name: Run MLflow Project (Basic Criteria)
+      run: |
+        cd MLProject
+        # Menjalankan MLflow Project menggunakan environment lokal
+        mlflow run . --env-manager=local
+
+    - name: Save Artifacts to GitHub Repository (Skilled Criteria)
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+        git add MLProject/mlruns/ MLProject/run_id.txt
+        git commit -m "Auto-save MLflow Artifacts and Run ID" || echo "Tidak ada perubahan"
+        git push
+
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: Build and Push Docker Image (Advance Criteria)
+      run: |
+        cd MLProject
+        # Membaca Run ID dari file yang tadi dibuat oleh modelling.py
+        RUN_ID=$(cat run_id.txt)
+        
+        # Membangun docker image dari model MLflow
+        mlflow models build-docker -m "runs:/$RUN_ID/model" -n ${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest
+        
+        # Mendorong (push) image ke Docker Hub
+        docker push ${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest
